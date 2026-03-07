@@ -71,9 +71,13 @@ Basandose en lo recolectado, determinar el tipo de deploy:
 | **Node.js + Docker** | `package.json` + `Dockerfile` + `docker-compose.yml` | clone → network → build → up → healthcheck |
 | **Python + Docker** | `requirements.txt`/`pyproject.toml` + `docker-compose.yml` | clone → network → build → up → healthcheck |
 | **Estatico + Docker** | `nginx.conf` + `Dockerfile` + contenido estatico | clone → network → build → up → healthcheck |
+| **Rust + Docker** | `Cargo.toml` + `Dockerfile` + `docker-compose.yml` | clone → network → build → up → healthcheck |
+| **Rust + systemd** | `Cargo.toml` + archivos `.service` o directorio `systemd/` | clone → cargo build --release → copiar binario y .service → systemctl enable+start |
 | **Multi-componente** | Multiples subdirectorios con sus propios docker-compose | clone → instalar cada componente en orden |
 
-Si el tipo no es claro, preguntar al usuario antes de generar.
+Si el tipo no es claro, preguntar al usuario antes de generar. Si el proyecto no encaja
+en ninguna categoria pero tiene un Dockerfile, tratarlo como Docker Compose generico.
+Si no tiene Docker ni systemd, sugerir al usuario que agregue uno de los dos y explicar las opciones.
 
 ---
 
@@ -213,7 +217,7 @@ Si el directorio ya existe:
 ```bash
 git clone --filter=blob:none --sparse "$REPO_URL"
 cd "$REPO_DIR"
-git sparse-checkout set --skip-checks dir1/ dir2/
+git sparse-checkout set dir1/ dir2/
 ```
 
 #### 4.7 Restaurar .env
@@ -260,16 +264,31 @@ pero el resultado final debe informar al usuario:
 # sudo systemctl enable --now {service}
 ```
 
+**Para Rust + systemd:**
+```bash
+# cargo build --release
+# sudo cp target/release/{binary} /usr/local/bin/
+# sudo cp {service_file} /etc/systemd/system/
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now {service}
+```
+
 #### 4.9 Health check
 Esperar que el servicio arranque y verificar:
 ```bash
 RETRIES=0
 MAX_RETRIES=15
 while [ $RETRIES -lt $MAX_RETRIES ]; do
-  # verificar segun tipo (docker inspect, curl health endpoint, systemctl is-active)
+  # Para Docker: docker inspect --format='{{.State.Health.Status}}' $CONTAINER_NAME
+  # Para systemd: systemctl is-active --quiet $SERVICE_NAME
+  # Para endpoint HTTP: curl -sf http://localhost:$HEALTH_PORT$HEALTH_ENDPOINT
+  # Elegir el metodo que corresponda al tipo de proyecto
   RETRIES=$((RETRIES + 1))
   sleep 2
 done
+# Si falla el health check, mostrar logs para diagnostico:
+# Docker: docker compose logs --tail 30
+# systemd: journalctl -u $SERVICE_NAME --no-pager -n 30
 ```
 
 #### 4.10 Resultado final

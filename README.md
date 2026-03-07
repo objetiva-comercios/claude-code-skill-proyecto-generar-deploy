@@ -1,59 +1,60 @@
 # generar-deploy
 
-Skill para Claude Code que genera documentacion de deploy (`DEPLOY.md`) y un script de
-instalacion automatica (`install.sh`) para cualquier proyecto. Analiza el tipo de proyecto,
-lee toda la documentacion disponible (`.planning/`, archivos `.md`, configuraciones) e
-identifica los archivos involucrados en la ejecucion (Docker Compose, package.json, go.mod,
-systemd, etc.) para producir archivos adaptados y funcionales. El objetivo es que cualquier
-proyecto se pueda instalar desde una maquina remota con un solo comando
-`curl -sL <url>/install.sh | bash`.
+Skill para Claude Code que genera documentacion de deploy y scripts de instalacion
+automatica para cualquier proyecto de software. Analiza el tipo de proyecto leyendo
+sus archivos de configuracion (Docker Compose, package.json, go.mod, Cargo.toml,
+systemd, etc.), detecta la infraestructura involucrada, y produce dos archivos
+adaptados y funcionales: un `DEPLOY.md` con la documentacion completa del despliegue
+y un `install.sh` idempotente que permite instalar el proyecto en una maquina remota
+con un solo comando `curl | bash`.
 
 ## Tecnologias
 
 | Categoria | Tecnologia |
 |-----------|------------|
 | Plataforma | Claude Code (skill) |
-| Framework de planificacion | Get Shit Done (GSD) |
 | Infraestructura soportada | Docker Compose, systemd, Traefik, Tailscale |
-| Lenguajes de proyecto soportados | Node.js, Go, Python, Rust, multi-componente |
-| Formato de salida | Bash (install.sh), Markdown (DEPLOY.md) |
+| Lenguajes de proyecto soportados | Node.js, Go, Python, Rust, estatico, multi-componente |
+| Formato de salida | Bash (`install.sh`), Markdown (`DEPLOY.md`) |
 
 ## Requisitos previos
 
 - [Claude Code](https://claude.com/claude-code) instalado
-- La skill debe estar en `~/.claude/skills/generar-deploy/SKILL.md`
 
 ## Instalacion
 
-La skill se instala copiando el archivo `SKILL.md` al directorio global de skills:
+```bash
+curl -sL https://raw.githubusercontent.com/objetiva-comercios/claude-code-skill-proyecto-generar-deploy/main/install.sh | bash
+```
+
+O manualmente:
 
 ```bash
 mkdir -p ~/.claude/skills/generar-deploy
-cp SKILL.md ~/.claude/skills/generar-deploy/SKILL.md
+curl -sL https://raw.githubusercontent.com/objetiva-comercios/claude-code-skill-proyecto-generar-deploy/main/SKILL.md \
+  -o ~/.claude/skills/generar-deploy/SKILL.md
 ```
 
-Claude Code la detecta automaticamente en la proxima sesion.
+Claude Code detecta la skill automaticamente en la proxima sesion.
 
 ## Activacion
 
-La skill se activa con cualquiera de estas frases:
+La skill se activa desde cualquier proyecto con `/generar-deploy` o con lenguaje natural:
 
 | Trigger | Ejemplo |
 |---------|---------|
 | Comando directo | `/generar-deploy` |
 | Pedir deploy | "genera el deploy", "prepara el deploy" |
 | Pedir instalador | "haceme el install.sh", "quiero poder instalar esto con curl" |
-| Pedir documentacion de deploy | "genera la doc de deploy", "deploy docs" |
+| Documentacion de deploy | "genera la doc de deploy", "deploy docs" |
 | Preparar produccion | "prepara el proyecto para produccion" |
 | Instalacion remota | "como se instala esto", "install script" |
 
-## Uso
+## Que hace la skill
 
-Desde la carpeta de cualquier proyecto, ejecutar `/generar-deploy` o pedirlo con lenguaje natural. La skill ejecuta 6 pasos:
+Cuando se activa, ejecuta 6 pasos:
 
-### Flujo de trabajo
-
-1. **Recolectar informacion** — Lee `.planning/`, README, CLAUDE.md, docker-compose.yml, package.json, go.mod, .env.example, archivos .service, y cualquier documentacion disponible
+1. **Recolectar informacion** — Lee `.planning/`, README, CLAUDE.md, docker-compose.yml, package.json, go.mod, Cargo.toml, .env.example, archivos .service y cualquier documentacion disponible
 2. **Clasificar el proyecto** — Determina el tipo de deploy segun los archivos encontrados
 3. **Extraer variables** — Obtiene repo URL, red Docker, dominio, puertos, health endpoint, config de Traefik. Pregunta al usuario lo que no puede inferir
 4. **Generar install.sh** — Script idempotente, sin interaccion, con colores, health check y resultado informativo
@@ -69,7 +70,9 @@ Desde la carpeta de cualquier proyecto, ejecutar `/generar-deploy` o pedirlo con
 | Go + systemd | `go.mod` + archivos `.service` | clone, go build, copiar binario y .service, systemctl |
 | Node.js + systemd | `package.json` + archivos `.service` | clone, npm install, build, copiar .service, systemctl |
 | Node.js + Docker | `package.json` + `Dockerfile` + `docker-compose.yml` | clone, network, build, up, healthcheck |
-| Python + Docker | `requirements.txt` + `docker-compose.yml` | clone, network, build, up, healthcheck |
+| Python + Docker | `requirements.txt`/`pyproject.toml` + `docker-compose.yml` | clone, network, build, up, healthcheck |
+| Rust + Docker | `Cargo.toml` + `Dockerfile` + `docker-compose.yml` | clone, network, build, up, healthcheck |
+| Rust + systemd | `Cargo.toml` + archivos `.service` | clone, cargo build --release, copiar binario y .service, systemctl |
 | Estatico + Docker | `nginx.conf` + `Dockerfile` | clone, network, build, up, healthcheck |
 | Multi-componente | Multiples subdirectorios con docker-compose | clone, instalar cada componente en orden |
 
@@ -79,8 +82,7 @@ Todo servicio que exponga una interfaz web se rutea a traves de Traefik como rev
 
 - Extrae los labels de Traefik del docker-compose.yml si existen
 - Si faltan labels en un proyecto que expone web, lo marca como error de configuracion y sugiere los labels necesarios
-- Si el proyecto solo escucha en localhost (sin interfaz web externa), documenta que no necesita Traefik
-- Incluye en el resultado final las instrucciones de DNS (Tailscale, DNS publico, desarrollo local)
+- Incluye instrucciones de DNS en el resultado final (Tailscale, DNS publico, desarrollo local)
 
 ### Estructura del install.sh generado
 
@@ -103,7 +105,7 @@ Resultado final con URLs, DNS y comandos utiles
 ```
 Instalacion rapida (curl | bash)
 Requisitos con versiones
-Arquitectura (diagrama ASCII, componentes)
+Arquitectura (componentes, conexiones)
 Variables de entorno (tabla)
 Servicios (tabla)
 Red y acceso (Traefik, DNS, 3 opciones de acceso)
@@ -113,17 +115,28 @@ Troubleshooting
 Estructura del proyecto
 ```
 
+## Deploy
+
+La skill se instala copiando un unico archivo. Ver [DEPLOY.md](DEPLOY.md) para instrucciones completas, instalacion manual y troubleshooting.
+
+```bash
+curl -sL https://raw.githubusercontent.com/objetiva-comercios/claude-code-skill-proyecto-generar-deploy/main/install.sh | bash
+```
+
 ## Arquitectura del proyecto
 
 ```
 claude-code-skill-proyecto-generar-deploy/
-├── README.md                           # Este archivo
-└── SKILL.md                            # Especificacion de la skill (se copia a ~/.claude/skills/)
+├── SKILL.md       # Especificacion de la skill (432 lineas, 6 pasos)
+├── install.sh     # Script de instalacion automatica
+├── DEPLOY.md      # Documentacion de deploy
+├── README.md      # Este archivo
+└── .gitignore     # Exclusiones de git
 ```
 
 La skill instalada vive en:
 
 ```
 ~/.claude/skills/generar-deploy/
-└── SKILL.md                            # Skill activa (413 lineas, 6 pasos)
+└── SKILL.md       # Claude Code la detecta automaticamente
 ```
