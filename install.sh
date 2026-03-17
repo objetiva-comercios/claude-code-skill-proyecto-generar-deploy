@@ -71,6 +71,15 @@ if [ ! -f "$TEMP_DIR/repo/SKILL.md" ]; then
   error "No se encontro SKILL.md en el repositorio"
 fi
 
+# -- Limpiar carpetas mal nombradas (de git clone directo) -------------------
+WRONG_DIR="${HOME}/.claude/skills/claude-code-skill-proyecto-generar-deploy"
+if [ -d "$WRONG_DIR" ]; then
+  warn "Detectada carpeta mal nombrada: $(basename "$WRONG_DIR")"
+  warn "Eliminando para usar el nombre correcto: ${SKILL_NAME}"
+  rm -rf "$WRONG_DIR"
+  ok "Carpeta incorrecta eliminada"
+fi
+
 # -- Instalar skill ----------------------------------------------------------
 info "Instalando skill en ${INSTALL_DIR}..."
 mkdir -p "$INSTALL_DIR"

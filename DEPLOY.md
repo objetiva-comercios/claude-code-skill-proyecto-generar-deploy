@@ -89,6 +89,7 @@ curl -sL https://raw.githubusercontent.com/objetiva-comercios/claude-code-skill-
 | Error "~/.claude/ no encontrado" | Instalar Claude Code primero desde https://claude.com/claude-code |
 | El curl no funciona | Verificar que el repo es publico o usar `git clone` + `bash install.sh` |
 | La skill no se activa con mi frase | Probar con `/generar-deploy` directamente o "genera el deploy" |
+| Carpeta con nombre incorrecto tras `git clone` directo | El install.sh detecta y elimina `~/.claude/skills/claude-code-skill-proyecto-generar-deploy/` automaticamente, reinstalando en la carpeta correcta `generar-deploy/`. Si hiciste clone manual, correr el install.sh para corregirlo |
 
 ## Estructura del proyecto
 
