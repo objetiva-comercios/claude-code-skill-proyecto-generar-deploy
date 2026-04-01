@@ -89,7 +89,7 @@ Extraer o preguntar al usuario estos datos esenciales:
 |----------|-------------------|------------------------------|
 | `REPO_URL` | Remote de git (`git remote get-url origin`) | Si |
 | `PROJECT_NAME` | Nombre del directorio o package.json name | No (inferir) |
-| `INSTALL_DIR` | Convención: `${HOME}/proyectos` | Confirmar |
+| `INSTALL_DIR` | Convención: `/opt` (servidor de produccion, nunca `$HOME`) | Confirmar |
 | `DOCKER_NETWORK` | docker-compose.yml networks (buscar external: true) | Si usa Docker |
 | `CONTAINER_NAME` | docker-compose.yml container_name | Si usa Docker |
 | `DOMAIN` | Labels de Traefik en docker-compose.yml (`traefik.http.routers.*.rule=Host(...)`) o preguntar | Si (si expone web) |
@@ -165,11 +165,16 @@ set -euo pipefail
 Variables al inicio del script, faciles de editar:
 ```bash
 # -- Config ------------------------------------------------------------------
-INSTALL_DIR="${HOME}/proyectos"
+INSTALL_DIR="/opt"
 REPO_DIR="${INSTALL_DIR}/{repo-name}"
 REPO_URL="https://github.com/{org}/{repo}.git"
 # ... mas variables segun el tipo
 ```
+
+**IMPORTANTE:** El `INSTALL_DIR` debe apuntar siempre a un directorio de produccion (tipicamente `/opt`).
+**NUNCA** usar `$HOME/proyectos` ni ninguna ruta dentro del home del usuario, porque puede coincidir
+con la carpeta donde se desarrollo el proyecto y pisarla. Si el usuario sugiere una ruta en `$HOME`,
+advertir que puede sobreescribir su copia de desarrollo y recomendar `/opt` en su lugar.
 
 #### 4.2 Colores y funciones de log
 ```bash
@@ -204,14 +209,27 @@ Verificar solo lo que el proyecto necesita:
 - **Python**: `python3`, `pip`
 - **systemd**: `systemctl`
 
-#### 4.5 Manejar instalacion previa
-Si el directorio ya existe:
+#### 4.5 Proteccion contra sobreescritura de repo de desarrollo
+Antes de cualquier operacion, verificar que no estamos pisando el repo de desarrollo:
+```bash
+# Proteccion: no sobreescribir repo de desarrollo
+if [ -d "$REPO_DIR/.git" ]; then
+  EXISTING_REMOTE=$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || echo "")
+  DIRTY_FILES=$(git -C "$REPO_DIR" status --porcelain 2>/dev/null | wc -l)
+  if [ "$DIRTY_FILES" -gt 0 ]; then
+    error "$REPO_DIR tiene cambios sin commitear — parece ser un repo de desarrollo. Abortando para no pisarlo."
+  fi
+fi
+```
+
+#### 4.6 Manejar instalacion previa
+Si el directorio ya existe (y paso la proteccion anterior):
 - Bajar servicios (docker compose down / systemctl stop)
 - Hacer backup de `.env` si existe
 - Eliminar directorio
 - Restaurar `.env` despues del clone
 
-#### 4.6 Clonar repositorio
+#### 4.7 Clonar repositorio
 - Repo simple: `git clone`
 - Monorepo con sparse checkout:
 ```bash
@@ -220,10 +238,10 @@ cd "$REPO_DIR"
 git sparse-checkout set dir1/ dir2/
 ```
 
-#### 4.7 Restaurar .env
+#### 4.8 Restaurar .env
 Si se hizo backup, restaurarlo despues del clone.
 
-#### 4.8 Segun tipo de proyecto
+#### 4.9 Segun tipo de proyecto
 
 **Para Docker Compose:**
 ```bash
@@ -273,7 +291,7 @@ pero el resultado final debe informar al usuario:
 # sudo systemctl enable --now {service}
 ```
 
-#### 4.9 Health check
+#### 4.10 Health check
 Esperar que el servicio arranque y verificar:
 ```bash
 RETRIES=0
@@ -291,7 +309,7 @@ done
 # systemd: journalctl -u $SERVICE_NAME --no-pager -n 30
 ```
 
-#### 4.10 Resultado final
+#### 4.11 Resultado final
 Mostrar resumen con:
 - Estado del servicio
 - URL de acceso (si tiene dominio)
