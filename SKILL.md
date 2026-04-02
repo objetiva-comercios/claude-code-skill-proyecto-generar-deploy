@@ -88,8 +88,9 @@ Extraer o preguntar al usuario estos datos esenciales:
 | Variable | De donde extraerla | Preguntar si no se encuentra |
 |----------|-------------------|------------------------------|
 | `REPO_URL` | Remote de git (`git remote get-url origin`) | Si |
+| `GIT_USER` | Owner del repo en GitHub (org o usuario), extraer de REPO_URL | No (inferir) |
 | `PROJECT_NAME` | Nombre del directorio o package.json name | No (inferir) |
-| `INSTALL_DIR` | Convención: `/opt` (servidor de produccion, nunca `$HOME`) | Confirmar |
+| `INSTALL_DIR` | Convención: `/opt/{GIT_USER}/{PROJECT_NAME}` (nunca `$HOME`) | No (inferir) |
 | `DOCKER_NETWORK` | docker-compose.yml networks (buscar external: true) | Si usa Docker |
 | `CONTAINER_NAME` | docker-compose.yml container_name | Si usa Docker |
 | `DOMAIN` | Labels de Traefik en docker-compose.yml (`traefik.http.routers.*.rule=Host(...)`) o preguntar | Si (si expone web) |
@@ -165,13 +166,21 @@ set -euo pipefail
 Variables al inicio del script, faciles de editar:
 ```bash
 # -- Config ------------------------------------------------------------------
-INSTALL_DIR="/opt"
-REPO_DIR="${INSTALL_DIR}/{repo-name}"
-REPO_URL="https://github.com/{org}/{repo}.git"
+GIT_USER="{git_user}"
+APP_NAME="{repo-name}"
+INSTALL_DIR="/opt/${GIT_USER}/${APP_NAME}"
+REPO_URL="https://github.com/{git_user}/{repo-name}.git"
 # ... mas variables segun el tipo
 ```
 
-**IMPORTANTE:** El `INSTALL_DIR` debe apuntar siempre a un directorio de produccion (tipicamente `/opt`).
+**Ruta de instalacion:** La estructura obligatoria es `/opt/{usuario_de_git}/{nombre_de_app}`.
+- `{usuario_de_git}` es el owner del repo en GitHub (organización o usuario). Se extrae de la URL del remote.
+- `{nombre_de_app}` es el nombre del repositorio.
+- Ejemplo: para `https://github.com/objetiva-comercios/objetiva-comercios-imgproc.git`
+  la ruta seria `/opt/objetiva-comercios/objetiva-comercios-imgproc`
+- El script debe crear el directorio del usuario (`/opt/{git_user}`) si no existe antes de clonar.
+
+**IMPORTANTE:** El `INSTALL_DIR` debe apuntar siempre a `/opt/{git_user}/{app_name}`.
 **NUNCA** usar `$HOME/proyectos` ni ninguna ruta dentro del home del usuario, porque puede coincidir
 con la carpeta donde se desarrollo el proyecto y pisarla. Si el usuario sugiere una ruta en `$HOME`,
 advertir que puede sobreescribir su copia de desarrollo y recomendar `/opt` en su lugar.
@@ -213,11 +222,11 @@ Verificar solo lo que el proyecto necesita:
 Antes de cualquier operacion, verificar que no estamos pisando el repo de desarrollo:
 ```bash
 # Proteccion: no sobreescribir repo de desarrollo
-if [ -d "$REPO_DIR/.git" ]; then
-  EXISTING_REMOTE=$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || echo "")
-  DIRTY_FILES=$(git -C "$REPO_DIR" status --porcelain 2>/dev/null | wc -l)
+if [ -d "$INSTALL_DIR/.git" ]; then
+  EXISTING_REMOTE=$(git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null || echo "")
+  DIRTY_FILES=$(git -C "$INSTALL_DIR" status --porcelain 2>/dev/null | wc -l)
   if [ "$DIRTY_FILES" -gt 0 ]; then
-    error "$REPO_DIR tiene cambios sin commitear — parece ser un repo de desarrollo. Abortando para no pisarlo."
+    error "$INSTALL_DIR tiene cambios sin commitear — parece ser un repo de desarrollo. Abortando para no pisarlo."
   fi
 fi
 ```
@@ -230,11 +239,13 @@ Si el directorio ya existe (y paso la proteccion anterior):
 - Restaurar `.env` despues del clone
 
 #### 4.7 Clonar repositorio
-- Repo simple: `git clone`
+- Crear directorio padre si no existe: `mkdir -p "/opt/${GIT_USER}"`
+- Repo simple: `git clone "$REPO_URL" "$INSTALL_DIR"`
 - Monorepo con sparse checkout:
 ```bash
-git clone --filter=blob:none --sparse "$REPO_URL"
-cd "$REPO_DIR"
+mkdir -p "/opt/${GIT_USER}"
+git clone --filter=blob:none --sparse "$REPO_URL" "$INSTALL_DIR"
+cd "$INSTALL_DIR"
 git sparse-checkout set dir1/ dir2/
 ```
 
